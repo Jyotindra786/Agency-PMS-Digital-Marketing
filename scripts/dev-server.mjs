@@ -2,9 +2,9 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import apiHandler from "./api/[...path].js";
+import apiHandler from "../api/[...path].js";
 
-const root = resolve(fileURLToPath(new URL(".", import.meta.url)));
+const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const port = Number(process.env.PORT || 3000);
 const maxBodyBytes = 1_000_000;
 const contentTypes = new Map([
