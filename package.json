@@ -1,0 +1,16 @@
+{
+  "name": "agency-pms-digital-marketing",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "db:bootstrap": "node scripts/bootstrap.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "bcryptjs": "^3.0.3"
+  }
+}

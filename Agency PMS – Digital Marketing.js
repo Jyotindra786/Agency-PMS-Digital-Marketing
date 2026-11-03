@@ -1,36 +1,21 @@
 const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const inr=n=>"₹"+Math.round(n||0).toLocaleString("en-IN"),uid=()=>Math.random().toString(36).slice(2,9);
+const inr=n=>"₹"+Math.round(n||0).toLocaleString("en-IN"),uid=()=>crypto.randomUUID();
 const fd=d=>d?new Date(d+"T00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"-";
-const iso=o=>{const d=new Date();d.setDate(d.getDate()+o);return d.toISOString().slice(0,10)};
-async function hash(s){try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("pms:"+s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}catch(e){return"x"+btoa(s)}}
-let DB,U=null,pg="dash",mem=null;
-const save=()=>{mem=JSON.stringify(DB);try{localStorage.setItem("pms_db",mem)}catch(e){}};
+let DB,U=null,pg="dash",revision=null;
+async function api(path,options={}){const response=await fetch(`/api/${path}`,{...options,credentials:"same-origin",headers:{"Content-Type":"application/json",...(options.headers||{})}}),body=await response.json();if(!response.ok)throw Object.assign(new Error(body.error||"Request failed."),{status:response.status});return body}
+async function loadState(){const result=await api("state");DB=result.data;revision=result.revision}
+const save=async(extra={})=>{const result=await api("state",{method:"PUT",body:JSON.stringify({data:DB,revision,...extra})});revision=result.revision};
 const PG=[["services","Services"],["projects","Projects"],["tasks","Tasks"],["costing","Project Costing"],["payments","Payments"],["reports","Reports"]];
 const full=(c,k)=>({none:0,view:1,edit:2}[c.perms[k]||"none"]);
-async function seed(){
-  const A=await hash("acme123"),J=await hash("jewel123");
-  const P={projects:"edit",tasks:"edit",services:"view",costing:"view",payments:"view",reports:"view"};
-  DB={admin:{uid:"admin",pw:await hash("admin123")},
-  services:[["SEO","Monthly SEO retainer",15000],["Social Media Management","Posts, reels, community",20000],["Google Ads Management","Search + display campaigns",12000],["Website Development","Business website",50000],["Content Writing","Blogs & copy",8000],["Branding","Logo & brand kit",25000]].map(([name,desc,price])=>({id:uid(),name,desc,price})),
-  clients:[{id:"c1",name:"Rakesh Shah",company:"Acme Industries",email:"rakesh@acme.example",phone:"98250 00001",uid:"acme",pw:A,perms:{...P}},
-           {id:"c2",name:"Meera Patel",company:"Surat Jewels",email:"meera@jewels.example",phone:"98250 00002",uid:"jewels",pw:J,perms:{projects:"view",tasks:"view",services:"view",costing:"none",payments:"none",reports:"none"}}],
-  projects:[],tasks:[],costs:[],payments:[],dash:{}};
-  const sv=DB.services,p=(cid,name,sids,status,pr,s,d)=>{const id=uid();DB.projects.push({id,cid,name,sids:sids.map(i=>sv[i].id),status,pr,start:s,due:d,note:""});return id};
-  const a=p("c1","Industrial Lead-Gen Campaign",[2,0],"Active",60,iso(-40),iso(20)),b=p("c1","Corporate Website",[3],"Completed",100,iso(-90),iso(-30)),c=p("c2","Festive Social Campaign",[1,5],"Active",35,iso(-20),iso(30)),d=p("c2","Brand Refresh",[5],"Planning",5,iso(-3),iso(60));
-  [[a,"Setup Google Ads account","Admin",iso(-30),"Done"],[a,"Landing page A/B test","Admin",iso(5),"In Progress"],[a,"Share product catalogue","Client",iso(2),"Pending"],[b,"Final handover","Admin",iso(-30),"Done"],[c,"Reel shoot schedule","Admin",iso(7),"In Progress"],[c,"Approve festive creatives","Client",iso(4),"Pending"],[d,"Moodboard","Admin",iso(10),"Pending"]].forEach(([pid,title,who,due,st])=>DB.tasks.push({id:uid(),pid,title,who,due,status:st}));
-  [[a,"Ads management (3 mo)",36000],[a,"SEO retainer (3 mo)",45000],[b,"Website build",50000],[c,"Social media (2 mo)",40000],[c,"Brand kit",25000],[d,"Branding",25000]].forEach(([pid,item,amt])=>DB.costs.push({id:uid(),pid,item,amt}));
-  [[a,40000,iso(-35),"UPI"],[a,20000,iso(0),"Bank"],[b,50000,iso(-60),"Bank"],[c,30000,iso(-10),"UPI"]].forEach(([pid,amt,date,mode])=>DB.payments.push({id:uid(),pid,amt,date,mode}));
-  save()}
-async function init(){try{DB=JSON.parse(localStorage.getItem("pms_db"))}catch(e){}if(!DB)await seed();login()}
+async function init(){try{const result=await api("session");U=result.user.role=="admin"?{role:"admin"}:{role:"client",cid:result.user.clientId};await loadState();shell()}catch(error){if(error.status==401)login();else login(error.message)}}
 function login(msg){U=null;$("#root").innerHTML=`<div id="login"><div class="box"><h2 style="font-size:19px">Agency PMS</h2><div class="mu">Digital Marketing – Project Management</div>
-<label>Login as</label><select id="lr"><option value="admin">Admin / User (Service Provider)</option><option value="client">Client</option></select>
 <label>User ID</label><input id="lu" autocomplete="username"><label>Password</label><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key=='Enter')doLogin()">
 <div class="err" id="le">${msg||""}</div><button class="p" style="width:100%;margin-top:12px" onclick="doLogin()">Login</button>
-<p class="mu">Demo → Admin: admin / admin123 · Client: acme / acme123 (full access) or jewels / jewel123 (limited)</p></div></div>`}
-async function doLogin(){const r=$("#lr").value,u=$("#lu").value.trim(),h=await hash($("#lp").value);
-  if(r=="admin"&&u==DB.admin.uid&&h==DB.admin.pw)U={role:"admin"};
-  else if(r=="client"){const c=DB.clients.find(c=>c.uid==u&&c.pw==h);if(c)U={role:"client",cid:c.id}}
-  if(!U)return $("#le").textContent="Invalid ID or password";pg="dash";shell()}
+<p class="mu">Use the login ID and password provided by your administrator.</p></div></div>`}
+async function doLogin(){const u=$("#lu").value.trim(),password=$("#lp").value;
+  try{const result=await api("login",{method:"POST",body:JSON.stringify({username:u,password})});U=result.user.role=="admin"?{role:"admin"}:{role:"client",cid:result.user.clientId};await loadState();pg="dash";shell()}
+  catch(error){$("#le").textContent=error.message}}
+async function logout(){try{await api("logout",{method:"POST",body:"{}"});U=null;DB=null;revision=null;login()}catch(error){alert(error.message)}}
 const adm=()=>U.role=="admin",me=()=>DB.clients.find(c=>c.id==U.cid);
 const prj=()=>adm()?DB.projects:DB.projects.filter(p=>p.cid==U.cid);
 const pids=()=>prj().map(p=>p.id),inP=x=>pids().includes(x.pid);
@@ -42,13 +27,13 @@ function menu(){const m=[["dash","Dashboard"]];if(adm()){m.push(["clients","Clie
 const IC={dash:"🏠",clients:"👥",services:"🧩",projects:"📁",tasks:"✅",costing:"🧮",payments:"💳",reports:"📊",db:"🗄️",pw:"⚙️"};
 function bottom(){const m=menu(),ks=m.map(x=>x[0]),bt=m.length<=5?ks:["dash","clients","projects","tasks","payments","costing"].filter(k=>ks.includes(k)).slice(0,4);return{m,bt}}
 function shell(){const{m,bt}=bottom(),lbl=k=>m.find(x=>x[0]==k)[1];
-$("#root").innerHTML=`<div class="app"><aside><h3>📈 Agency PMS</h3>${m.map(([k,l])=>`<a class="${pg==k?"on":""}" onclick="go('${k}')">${IC[k]} ${l}</a>`).join("")}<a onclick="login()" style="margin-top:14px">⎋ Logout</a></aside>
-<div class="main"><div class="top"><h1>${lbl(pg)}</h1><span class="chip b">${adm()?"Admin":esc(me().company)}</span><button class="lo" onclick="login()">⎋</button></div><div id="pg"></div></div>
+$("#root").innerHTML=`<div class="app"><aside><h3>📈 Agency PMS</h3>${m.map(([k,l])=>`<a class="${pg==k?"on":""}" onclick="go('${k}')">${IC[k]} ${l}</a>`).join("")}<a onclick="logout()" style="margin-top:14px">⎋ Logout</a></aside>
+<div class="main"><div class="top"><h1>${lbl(pg)}</h1><span class="chip b">${adm()?"Admin":esc(me().company)}</span><button class="lo" onclick="logout()">⎋</button></div><div id="pg"></div></div>
 <nav id="bn">${bt.map(k=>`<a class="${pg==k?"on":""}" onclick="go('${k}')"><i>${IC[k]}</i>${lbl(k).replace("Project Costing","Costing").replace("My Projects","Projects")}</a>`).join("")}${m.length>bt.length?`<a class="${bt.includes(pg)?"":"on"}" onclick="more()"><i>☰</i>More</a>`:""}</nav></div>`;view()}
-function more(){const{m,bt}=bottom();$("#mb").innerHTML=`<h2>Menu</h2>${m.filter(x=>!bt.includes(x[0])).map(([k,l])=>`<a class="mi" onclick="closeM();go('${k}')">${IC[k]} ${l}</a>`).join("")}<a class="mi" onclick="closeM();login()">⎋ Logout</a>`;$("#md").style.display="flex"}
+function more(){const{m,bt}=bottom();$("#mb").innerHTML=`<h2>Menu</h2>${m.filter(x=>!bt.includes(x[0])).map(([k,l])=>`<a class="mi" onclick="closeM();go('${k}')">${IC[k]} ${l}</a>`).join("")}<a class="mi" onclick="closeM();logout()">⎋ Logout</a>`;$("#md").style.display="flex"}
 const go=k=>{pg=k;shell()};
 function view(){const f={dash,clients,services,projects,tasks,costing,payments,reports,db:dbp,pw}[pg];$("#pg").innerHTML=f()}
-const rr=()=>{save();view()};
+async function rr(extra={}){try{await save(extra);view()}catch(error){if(error.status==409){try{await loadState();view()}catch(reloadError){alert(reloadError.message)}}alert(error.message)}}
 function tbl(h,rows){return`<div class="tw"><table><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr>${rows.length?rows.map(r=>`<tr>${r.map((c,i)=>`<td data-l="${esc(h[i]||"")}">${c}</td>`).join("")}</tr>`).join(""):`<tr><td colspan="${h.length}" class="mu">No records.</td></tr>`}</table></div>`}
 const bar=v=>`<div class="bar"><i style="width:${v}%"></i></div><span class="mu">${v}%</span>`;
 const st=s=>`<span class="chip ${{Active:"b",Completed:"g",Planning:"o",Done:"g","In Progress":"b",Pending:"o","On Hold":"r"}[s]||""}">${esc(s)}</span>`;
@@ -82,7 +67,7 @@ function fld(f,v){const[k,l,t="text",o]=f,val=v[k]??"";if(t=="select")return`<la
   if(t=="textarea")return`<label>${l}</label><textarea id="f_${k}">${esc(val)}</textarea>`;return`<label>${l}</label><input id="f_${k}" type="${t}" value="${esc(val)}">`}
 function openForm(k,id){const e=E[k]||{col:"clients",title:"Client",f:[["name","Contact name"],["company","Company"],["email","Email","email"],["phone","Phone"]]},v=DB[e.col].find(x=>x.id==id)||(k=="projects"?{status:"Planning",pr:0,sids:[]}:{});
   let x=e.f.map(f=>fld(f,v)).join("");
-  if(k=="clients"){const p=v.perms||{};x+=`<label>Login User ID</label><input id="f_uid" value="${esc(v.uid||"")}"><label>Password ${id?"(blank = unchanged)":""}</label><input id="f_pw" type="text" placeholder="set password">
+  if(k=="clients"){const p=v.perms||{};x+=`<label>Login User ID</label><input id="f_uid" value="${esc(v.uid||"")}"><label>Password ${id?"(blank = unchanged)":""}</label><input id="f_pw" type="password" autocomplete="new-password" placeholder="set password">
   <h2 style="margin-top:14px">Client permissions</h2><div class="mu">Hidden = menu me nahi dikhega · View = sirf dekh sakta · Edit = tasks (status/add) & project feedback me change</div>
   ${PG.map(([a,l])=>`<div class="row" style="margin-top:6px"><span class="sp">${l}</span><select id="p_${a}" style="width:130px"><option value="none">Hidden</option><option value="view" ${p[a]=="view"?"selected":""}>View</option>${["tasks","projects"].includes(a)?`<option value="edit" ${p[a]=="edit"?"selected":""}>View + Edit</option>`:""}</select></div>`).join("")}`}
   $("#mb").innerHTML=`<h2>${id?"Edit":"Add"} ${e.title}</h2>${x}<div class="err" id="fe"></div><div class="row" style="margin-top:14px"><button class="p" onclick="commit('${k}','${id||""}')">Save</button><button onclick="closeM()">Cancel</button></div>`;$("#md").style.display="flex"}
@@ -91,11 +76,13 @@ async function commit(k,id){const e=E[k]||{col:"clients",f:[["name"],["company"]
   for(const f of e.f){const t=f[2],n=f[0];o[n]=t=="multi"?[...document.getElementsByName("f_"+n)].filter(i=>i.checked).map(i=>i.value):t=="number"?+$("#f_"+n).value||0:$("#f_"+n).value}
   if(k=="projects")o.pr=Math.max(0,Math.min(100,o.pr));
   const old=DB[e.col].find(x=>x.id==id)||{};
+  let credential=null;
   if(k=="clients"){o.uid=$("#f_uid").value.trim();if(!o.company||!o.uid)return $("#fe").textContent="Company & User ID required";
-    if(DB.clients.some(c=>c.uid==o.uid&&c.id!=id))return $("#fe").textContent="User ID already used";
-    const pw=$("#f_pw").value;if(!id&&!pw)return $("#fe").textContent="Password required";o.pw=pw?await hash(pw):old.pw;o.perms={};PG.forEach(([a])=>o.perms[a]=$("#p_"+a).value)}
+    if(DB.clients.some(c=>c.uid.toLowerCase()==o.uid.toLowerCase()&&c.id!=id))return $("#fe").textContent="User ID already used";
+    const pw=$("#f_pw").value;if((!id||pw||o.uid!=old.uid)&&pw.length<12)return $("#fe").textContent="Password must be at least 12 characters";
+    if(pw||!id)credential={clientId:id||uid(),password:pw};o.perms={};PG.forEach(([a])=>o.perms[a]=$("#p_"+a).value)}
   else if(!(o.name||o.title||o.item||o.pid))return $("#fe").textContent="Please fill details";
-  if(id)Object.assign(old,o);else DB[e.col].push({id:uid(),...o});closeM();rr()}
+  if(id)Object.assign(old,o);else DB[e.col].push({id:credential?.clientId||uid(),...o});closeM();await rr(credential?{credential}:{})}
 function del(k,id){ask("Delete permanently?",()=>del0(k,id))}
 function del0(k,id){const c=(E[k]||{col:"clients"}).col;DB[c]=DB[c].filter(x=>x.id!=id);
   if(k=="projects"){["tasks","costs","payments"].forEach(t=>DB[t]=DB[t].filter(x=>x.pid!=id))}if(k=="clients"){DB.projects.filter(p=>p.cid==id).forEach(p=>del2(p.id));}closeM();rr()}
@@ -124,7 +111,6 @@ function dbp(){return`<div class="card"><h2>Common Project Database</h2><input p
   <div id="dbt">${dbt("")}</div></div>`}
 const dbt=s=>tbl(["Client","Project","Services","Status","Progress","Start","Due","Tasks","Cost","Paid","Outstanding"],DB.projects.filter(p=>(cn(p.cid)+p.name+sn(p.sids)).toLowerCase().includes(s.toLowerCase())).map(p=>{const t=DB.tasks.filter(x=>x.pid==p.id);return[esc(cn(p.cid)),esc(p.name),esc(sn(p.sids)),st(p.status),p.pr+"%",fd(p.start),fd(p.due),t.filter(x=>x.status=="Done").length+"/"+t.length,inr(cost(p.id)),inr(paid(p.id)),inr(cost(p.id)-paid(p.id))]}));
 const q=s=>$("#dbt").innerHTML=dbt(s);
-function pw(){return`<div class="card" style="max-width:420px"><h2>Admin settings</h2><label>New admin password</label><input id="np" type="text"><button class="p" style="margin-top:10px" onclick="chg()">Update password</button><div class="mu" id="pm"></div>
-  <hr style="border:0;border-top:1px solid var(--ln);margin:16px 0"><button class="d" onclick="ask('Saara data reset hoga. Continue?',()=>{try{localStorage.removeItem('pms_db')}catch(e){}DB=null;closeM();init()})">Reset demo data</button></div>`}
-async function chg(){const v=$("#np").value;if(v.length<6)return $("#pm").textContent="Min 6 characters";DB.admin.pw=await hash(v);save();$("#pm").textContent="Password updated"}
+function pw(){return`<div class="card" style="max-width:420px"><h2>Admin settings</h2><label>Current password</label><input id="cp" type="password" autocomplete="current-password"><label>New password (at least 12 characters)</label><input id="np" type="password" autocomplete="new-password"><button class="p" style="margin-top:10px" onclick="chg()">Update password</button><div class="mu" id="pm"></div></div>`}
+async function chg(){const currentPassword=$("#cp").value,newPassword=$("#np").value;if(newPassword.length<12)return $("#pm").textContent="Password must be at least 12 characters";try{await api("password",{method:"POST",body:JSON.stringify({currentPassword,newPassword})});$("#cp").value="";$("#np").value="";$("#pm").textContent="Password updated"}catch(error){$("#pm").textContent=error.message}}
 init();
