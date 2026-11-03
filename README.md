@@ -19,7 +19,13 @@ Static front end hosted on Vercel, with a Vercel API that stores application dat
    The bootstrap script is safe to rerun: it does not overwrite existing data or accounts. Clear the temporary `ADMIN_PASSWORD` from the shell after setup.
 4. Deploy or redeploy the Vercel project. Sign in with the admin credentials, then add client accounts from the admin panel. Client data is filtered and write permissions are enforced by the API, not only by the UI.
 
-For local development, create an ignored `.env` file using `.env.example`, then run `npx vercel dev`. Do not deploy until the Production environment variables and bootstrap are complete.
+For local development, create an ignored `.env` file using `.env.example`, set `DATABASE_URL`, `SESSION_SECRET`, and `ADMIN_USERNAME`, then start the app:
+
+```powershell
+npm run dev
+```
+
+Open `http://localhost:3000`. Do not use VS Code Live Server for this app; it serves static files without the `/api` backend. Do not deploy until the Production environment variables and bootstrap are complete.
 
 ## Data and authentication
 
