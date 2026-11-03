@@ -1,12 +1,13 @@
 {
   "name": "agency-pms-digital-marketing",
   "private": true,
+  "main": "server.mjs",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env scripts/dev-server.mjs",
+    "dev": "node --env-file-if-exists=.env server.mjs",
     "db:bootstrap": "node --env-file-if-exists=.env scripts/bootstrap.mjs",
     "test": "node --test"
   },

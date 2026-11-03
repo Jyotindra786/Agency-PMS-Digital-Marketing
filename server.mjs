@@ -2,9 +2,9 @@ import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import apiHandler from "../api/[...path].js";
+import apiHandler from "./api/[...path].js";
 
-const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
+const root = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const port = Number(process.env.PORT || 3000);
 const maxBodyBytes = 1_000_000;
 const contentTypes = new Map([
@@ -102,7 +102,10 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.listen(port, "127.0.0.1", () => {
+const logReady = () => {
   console.log(`Agency PMS running at http://localhost:${port}`);
   console.log("Press Ctrl+C to stop the server.");
-});
+};
+
+if (process.env.VERCEL) server.listen(port, logReady);
+else server.listen(port, "127.0.0.1", logReady);
